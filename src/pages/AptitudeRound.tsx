@@ -7,24 +7,34 @@ import Navbar from "@/components/Navbar";
 
 const questions = [
   {
-    q: "What is the time complexity of binary search?",
-    options: ["O(n)", "O(log n)", "O(n²)", "O(1)"],
+    q: "If a train travels 360 km in 4 hours, what is its average speed in km/h?",
+    options: ["80 km/h", "90 km/h", "100 km/h", "70 km/h"],
     correct: 1,
   },
   {
-    q: "Which data structure uses FIFO ordering?",
-    options: ["Stack", "Queue", "Tree", "Graph"],
+    q: "A is twice as old as B. If A is 30 years old, how old will B be in 5 years?",
+    options: ["15", "20", "25", "10"],
     correct: 1,
   },
   {
-    q: "What does REST stand for?",
+    q: "Complete the series: 2, 6, 18, 54, __",
+    options: ["108", "162", "72", "216"],
+    correct: 1,
+  },
+  {
+    q: "If all roses are flowers and some flowers fade quickly, which statement is true?",
     options: [
-      "Representational State Transfer",
-      "Remote Execution Service Technology",
-      "Reliable Structured Transmission",
-      "Real-time Event Streaming Transfer",
+      "All roses fade quickly",
+      "Some roses may fade quickly",
+      "No roses fade quickly",
+      "All flowers are roses",
     ],
-    correct: 0,
+    correct: 1,
+  },
+  {
+    q: "A shopkeeper sells an item at 20% profit. If the cost price is ₹500, what is the selling price?",
+    options: ["₹550", "₹600", "₹650", "₹700"],
+    correct: 1,
   },
 ];
 
