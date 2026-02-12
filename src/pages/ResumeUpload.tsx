@@ -3,11 +3,14 @@ import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Upload, FileText, CheckCircle, Loader2 } from "lucide-react";
 import { useInterview } from "@/contexts/InterviewContext";
+import { supabase } from "@/integrations/supabase/client";
 import Navbar from "@/components/Navbar";
+import { useToast } from "@/hooks/use-toast";
 
 const ResumeUpload = () => {
   const navigate = useNavigate();
   const { setSkills, setResumeFile } = useInterview();
+  const { toast } = useToast();
   const [file, setFile] = useState<File | null>(null);
   const [processing, setProcessing] = useState(false);
   const [dragOver, setDragOver] = useState(false);
@@ -23,16 +26,55 @@ const ResumeUpload = () => {
     if (f) handleFile(f);
   }, [handleFile]);
 
+  const extractTextFromPDF = async (file: File): Promise<string> => {
+    // Read file as array buffer and extract basic text
+    const buffer = await file.arrayBuffer();
+    const bytes = new Uint8Array(buffer);
+    let text = "";
+    for (let i = 0; i < bytes.length; i++) {
+      const char = bytes[i];
+      if ((char >= 32 && char <= 126) || char === 10 || char === 13) {
+        text += String.fromCharCode(char);
+      }
+    }
+    // Clean up PDF artifacts and extract readable content
+    const cleaned = text
+      .replace(/\/[A-Z][a-zA-Z]*\s*/g, " ")
+      .replace(/\d+ \d+ obj/g, " ")
+      .replace(/endobj/g, " ")
+      .replace(/stream[\s\S]*?endstream/g, " ")
+      .replace(/<<[\s\S]*?>>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    return cleaned || file.name;
+  };
+
   const handleUpload = async () => {
     if (!file) return;
     setProcessing(true);
-    // Simulated AI skill extraction (replace with real API call)
-    await new Promise(r => setTimeout(r, 2500));
-    const mockSkills = ["React", "TypeScript", "Node.js", "Python", "SQL", "REST APIs", "Git"];
-    setSkills(mockSkills);
-    setResumeFile(file.name);
-    setProcessing(false);
-    navigate("/aptitude");
+    try {
+      const resumeText = await extractTextFromPDF(file);
+      
+      const { data, error } = await supabase.functions.invoke("extract-skills", {
+        body: { resumeText },
+      });
+
+      if (error) throw error;
+
+      const skills = data.skills || ["JavaScript", "React", "Node.js"];
+      setSkills(skills);
+      setResumeFile(file.name);
+      toast({ title: "Skills Extracted!", description: `Found ${skills.length} skills from your resume.` });
+      navigate("/aptitude");
+    } catch (err) {
+      console.error("Upload error:", err);
+      toast({ title: "Error", description: "Failed to extract skills. Using defaults.", variant: "destructive" });
+      setSkills(["JavaScript", "React", "Node.js", "Python", "SQL"]);
+      setResumeFile(file.name);
+      navigate("/aptitude");
+    } finally {
+      setProcessing(false);
+    }
   };
 
   return (
