@@ -1,30 +1,42 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Mic, Volume2, Loader2, CheckCircle } from "lucide-react";
 import { useInterview } from "@/contexts/InterviewContext";
+import { supabase } from "@/integrations/supabase/client";
 import Navbar from "@/components/Navbar";
 import WaveformVisualizer from "@/components/WaveformVisualizer";
-
-const feedbacks = [
-  "Strong understanding demonstrated with good practical examples.",
-  "Clear explanation with solid technical depth and structure.",
-  "Well-structured answer showing real-world experience and knowledge.",
-];
+import { useToast } from "@/hooks/use-toast";
 
 const TechnicalRound = () => {
   const navigate = useNavigate();
   const { skills, setTechnicalScores } = useInterview();
-  const [phase, setPhase] = useState<"intro" | "speaking" | "listening" | "evaluating" | "complete">("intro");
+  const { toast } = useToast();
+  const [phase, setPhase] = useState<"loading" | "intro" | "speaking" | "listening" | "evaluating" | "complete">("loading");
   const [currentQ, setCurrentQ] = useState(0);
   const [transcript, setTranscript] = useState("");
   const [results, setResults] = useState<{ question: string; answer: string; score: number; feedback: string }[]>([]);
+  const [questions, setQuestions] = useState<string[]>([]);
 
-  const questions = useMemo(() => [
-    `Explain how ${skills[0] || "React"} handles state management and what patterns you prefer.`,
-    `Describe a challenging project where you used ${skills[1] || "TypeScript"} and how you solved a key problem.`,
-    `How would you design a scalable API using ${skills[2] || "Node.js"}? Walk me through your approach.`,
-  ], [skills]);
+  // Fetch AI-generated questions on mount
+  useEffect(() => {
+    const fetchQuestions = async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke("generate-questions", {
+          body: { skills },
+        });
+        if (error) throw error;
+        setQuestions(data.questions || []);
+        setPhase("intro");
+      } catch (err) {
+        console.error("Failed to generate questions:", err);
+        toast({ title: "Error", description: "Failed to generate questions. Using defaults.", variant: "destructive" });
+        setQuestions(skills.slice(0, 3).map(s => `Explain how ${s} works and describe a challenging problem you solved with it.`));
+        setPhase("intro");
+      }
+    };
+    fetchQuestions();
+  }, [skills, toast]);
 
   const speak = useCallback((text: string): Promise<void> => {
     return new Promise((resolve) => {
@@ -40,7 +52,7 @@ const TechnicalRound = () => {
   const listen = useCallback((): Promise<string> => {
     return new Promise((resolve) => {
       const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-      if (!SR) { resolve("Speech recognition not supported. This is a text placeholder answer."); return; }
+      if (!SR) { resolve("Speech recognition not supported."); return; }
       const recognition = new SR();
       recognition.continuous = false;
       recognition.interimResults = false;
@@ -52,6 +64,18 @@ const TechnicalRound = () => {
       recognition.start();
       setTimeout(() => { try { recognition.stop(); } catch {} }, 15000);
     });
+  }, []);
+
+  const evaluateAnswer = useCallback(async (question: string, answer: string): Promise<{ score: number; feedback: string }> => {
+    try {
+      const { data, error } = await supabase.functions.invoke("evaluate-answer", {
+        body: { question, answer, type: "technical" },
+      });
+      if (error) throw error;
+      return { score: data.score || 5, feedback: data.feedback || "Evaluation complete." };
+    } catch {
+      return { score: 6, feedback: "AI evaluation unavailable. Default score assigned." };
+    }
   }, []);
 
   const runInterview = useCallback(async () => {
@@ -67,10 +91,9 @@ const TechnicalRound = () => {
       setTranscript(answer);
 
       setPhase("evaluating");
-      await new Promise(r => setTimeout(r, 2000));
+      const evaluation = await evaluateAnswer(questions[i], answer);
 
-      const score = Math.floor(Math.random() * 3) + 7;
-      allResults.push({ question: questions[i], answer, score, feedback: feedbacks[i] });
+      allResults.push({ question: questions[i], answer, score: evaluation.score, feedback: evaluation.feedback });
       setResults([...allResults]);
 
       if (i < questions.length - 1) {
@@ -80,7 +103,7 @@ const TechnicalRound = () => {
     setTechnicalScores(allResults);
     setPhase("complete");
     setTimeout(() => navigate("/hr"), 2500);
-  }, [questions, speak, listen, setTechnicalScores, navigate]);
+  }, [questions, speak, listen, evaluateAnswer, setTechnicalScores, navigate]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -89,20 +112,27 @@ const TechnicalRound = () => {
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
           <div className="text-center mb-8">
             <h1 className="text-3xl font-bold mb-2">Technical <span className="gradient-text">Round</span></h1>
-            <p className="text-muted-foreground">AI Voice Interview • Question {currentQ + 1} of {questions.length}</p>
+            <p className="text-muted-foreground">AI Voice Interview • Question {currentQ + 1} of {questions.length || 3}</p>
           </div>
 
           <div className="w-full h-2 bg-secondary rounded-full mb-10 overflow-hidden">
-            <motion.div className="h-full gradient-primary rounded-full" animate={{ width: `${((currentQ + (phase === "complete" ? 1 : 0)) / questions.length) * 100}%` }} />
+            <motion.div className="h-full gradient-primary rounded-full" animate={{ width: `${((currentQ + (phase === "complete" ? 1 : 0)) / (questions.length || 3)) * 100}%` }} />
           </div>
 
           <div className="glass rounded-2xl p-10 text-center min-h-[280px] flex items-center justify-center">
             <AnimatePresence mode="wait">
+              {phase === "loading" && (
+                <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                  <Loader2 className="w-16 h-16 text-primary mx-auto mb-6 animate-spin" />
+                  <h2 className="text-xl font-semibold mb-4">AI is preparing your questions...</h2>
+                  <p className="text-muted-foreground">Generating personalized questions based on your resume skills.</p>
+                </motion.div>
+              )}
               {phase === "intro" && (
                 <motion.div key="intro" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
                   <Mic className="w-16 h-16 text-primary mx-auto mb-6" />
                   <h2 className="text-xl font-semibold mb-4">Ready for your technical interview?</h2>
-                  <p className="text-muted-foreground mb-8">AI will ask questions based on your resume skills. Speak your answers clearly.</p>
+                  <p className="text-muted-foreground mb-8">AI has generated {questions.length} questions based on your resume skills. Speak your answers clearly.</p>
                   <button onClick={runInterview} className="gradient-primary text-primary-foreground px-8 py-3.5 rounded-xl font-semibold glow hover:opacity-90 transition-all">
                     Begin Interview
                   </button>
@@ -125,7 +155,7 @@ const TechnicalRound = () => {
               {phase === "evaluating" && (
                 <motion.div key="eval" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
                   <Loader2 className="w-16 h-16 text-primary mx-auto mb-6 animate-spin" />
-                  <h2 className="text-xl font-semibold mb-2">Evaluating your answer...</h2>
+                  <h2 className="text-xl font-semibold mb-2">AI is evaluating your answer...</h2>
                   <p className="text-muted-foreground italic max-w-md mx-auto">"{transcript}"</p>
                 </motion.div>
               )}

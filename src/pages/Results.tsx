@@ -1,14 +1,18 @@
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
-import { Award, Brain, Mic, Video, RotateCcw } from "lucide-react";
+import { Award, Brain, Mic, Video, RotateCcw, Loader2 } from "lucide-react";
 import { useInterview } from "@/contexts/InterviewContext";
+import { supabase } from "@/integrations/supabase/client";
 import Navbar from "@/components/Navbar";
 import CircularProgress from "@/components/CircularProgress";
 
 const Results = () => {
   const navigate = useNavigate();
   const { aptitudeScore, technicalScores, hrScores } = useInterview();
+  const [aiSummary, setAiSummary] = useState("");
+  const [aiRecommendation, setAiRecommendation] = useState("");
+  const [loadingReport, setLoadingReport] = useState(true);
 
   const techAvg = useMemo(() =>
     technicalScores.length
@@ -23,8 +27,28 @@ const Results = () => {
   , [hrScores]);
 
   const overall = Math.round((aptitudeScore + techAvg + hrAvg) / 3);
-  const recommendation = overall >= 80 ? "Strong Hire" : overall >= 60 ? "Consider" : "Needs Improvement";
-  const recColor = overall >= 80 ? "text-accent" : overall >= 60 ? "text-primary" : "text-destructive";
+
+  useEffect(() => {
+    const fetchReport = async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke("generate-report", {
+          body: { aptitudeScore, technicalScores, hrScores },
+        });
+        if (error) throw error;
+        setAiSummary(data.summary || "");
+        setAiRecommendation(data.recommendation || "");
+      } catch {
+        setAiSummary("Evaluation complete. Review your scores above for detailed breakdown.");
+        setAiRecommendation(overall >= 80 ? "Strong Hire" : overall >= 60 ? "Consider" : "Needs Improvement");
+      } finally {
+        setLoadingReport(false);
+      }
+    };
+    fetchReport();
+  }, [aptitudeScore, technicalScores, hrScores, overall]);
+
+  const recommendation = aiRecommendation || (overall >= 80 ? "Strong Hire" : overall >= 60 ? "Consider" : "Needs Improvement");
+  const recColor = recommendation === "Strong Hire" ? "text-accent" : recommendation === "Consider" ? "text-primary" : "text-destructive";
 
   return (
     <div className="min-h-screen bg-background">
@@ -76,12 +100,14 @@ const Results = () => {
               <Award className="w-6 h-6 text-primary" />
               <h3 className="text-xl font-bold">AI Feedback</h3>
             </div>
-            <p className="text-muted-foreground leading-relaxed">
-              The candidate demonstrates strong technical knowledge and structured thinking.
-              {techAvg >= 70 ? " Technical responses showed good depth and practical understanding." : " Some technical areas would benefit from deeper exploration."}
-              {hrAvg >= 70 ? " Communication was clear and confident during the HR round." : " Communication skills could be improved for better clarity and impact."}
-              {overall >= 70 ? " Overall, a promising candidate with solid fundamentals and good potential." : " With focused preparation, the candidate can significantly improve their interview performance."}
-            </p>
+            {loadingReport ? (
+              <div className="flex items-center gap-3 text-muted-foreground">
+                <Loader2 className="w-5 h-5 animate-spin" />
+                <p>AI is generating your personalized feedback...</p>
+              </div>
+            ) : (
+              <p className="text-muted-foreground leading-relaxed">{aiSummary}</p>
+            )}
           </motion.div>
 
           {/* Detailed Technical Results */}
