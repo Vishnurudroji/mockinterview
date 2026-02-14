@@ -13,6 +13,10 @@ interface InterviewState {
   aptitudeScore: number;
   technicalScores: ScoreEntry[];
   hrScores: ScoreEntry[];
+
+  selectedMode: string;
+  setSelectedMode: (m: string) => void;
+
   setSkills: (s: string[]) => void;
   setResumeFile: (f: string | null) => void;
   setAptitudeScore: (s: number) => void;
@@ -34,15 +38,25 @@ export const InterviewProvider = ({ children }: { children: ReactNode }) => {
   const [aptitudeScore, setAptitudeScore] = useState(0);
   const [technicalScores, setTechnicalScores] = useState<ScoreEntry[]>([]);
   const [hrScores, setHrScores] = useState<ScoreEntry[]>([]);
+  const [selectedMode, setSelectedMode] = useState<string>("all"); // 🔥 IMPORTANT
 
   return (
-    <InterviewContext.Provider value={{
-      skills, setSkills,
-      resumeFile, setResumeFile,
-      aptitudeScore, setAptitudeScore,
-      technicalScores, setTechnicalScores,
-      hrScores, setHrScores,
-    }}>
+    <InterviewContext.Provider
+      value={{
+        skills,
+        setSkills,
+        resumeFile,
+        setResumeFile,
+        aptitudeScore,
+        setAptitudeScore,
+        technicalScores,
+        setTechnicalScores,
+        hrScores,
+        setHrScores,
+        selectedMode,
+        setSelectedMode,
+      }}
+    >
       {children}
     </InterviewContext.Provider>
   );
